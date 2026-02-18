@@ -1,0 +1,55 @@
+# AI员工协作系统 - Docker本地服务编排
+# 启动命令: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库 (带 PGVector 扩展)
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aispace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aispace_user
+      POSTGRES_PASSWORD: aispace_password
+      POSTGRES_DB: aispace_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aispace_user -d aispace_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aispace-network
+
+  # pgAdmin (可选，用于数据库管理)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: aispace-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@aispace.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - aispace-network
+    profiles:
+      - tools  # 只在明确指定时启动
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  aispace-network:
+    driver: bridge

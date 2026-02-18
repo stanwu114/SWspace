@@ -1,0 +1,151 @@
+# AI员工协作系统 - 后端配置
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+    min-response-size: 1024
+
+spring:
+  application:
+    name: aispace-backend
+  
+  # 数据库配置
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aispace_db
+    username: qoder
+    password: qoder_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Shanghai
+    open-in-view: false
+  
+  # Flyway数据库迁移
+  flyway:
+    enabled: false
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    table: flyway_schema_history
+  
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# AI模型配置 (AgentService使用)
+ai:
+  openai:
+    api-key: sk-h2qfKaCNUlPuGrFmzUoGvhFlhxVT8R5Z3AaxtxTavXkU3gbn
+    base-url: https://api.moonshot.cn/v1
+    model: kimi-k2-0711-preview
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.aispace: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# API文档配置
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+# 应用自定义配置
+aispace:
+  # AI模型配置
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: https://api.openai.com/v1
+      model: gpt-4
+      timeout: 60000
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://api.deepseek.com/v1
+      model: deepseek-chat
+      timeout: 60000
+  
+  # 文件存储配置
+  storage:
+    base-path: ${user.home}/.aispace
+    documents-path: ${aispace.storage.base-path}/documents
+    templates-path: ${aispace.storage.base-path}/templates
+    exports-path: ${aispace.storage.base-path}/exports
+    backups-path: ${aispace.storage.base-path}/backups
+  
+  # 安全配置
+  security:
+    encryption-key: ${ENCRYPTION_KEY:default-dev-key-change-in-prod}
+  
+  # 招标监控配置
+  bidding:
+    enabled: true
+    cron: "0 0 */2 * * ?"  # 每2小时执行一次
+    sources:
+      - name: 中国政府采购网
+        url: http://www.ccgp.gov.cn
+        enabled: true
+
+# 通知服务配置
+notification:
+  feishu:
+    webhook-url: ${FEISHU_WEBHOOK_URL:}
+    secret: ${FEISHU_SECRET:}
+  telegram:
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+
+# 应用配置
+app:
+  backup:
+    path: ${user.home}/.aiworker/backups
+    retention-days: 30
+  security:
+    encryption-key: ${ENCRYPTION_KEY:}

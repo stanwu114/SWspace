@@ -1,0 +1,58 @@
+# 依赖
+node_modules/
+target/
+dist/
+dist-electron/
+release/
+.pnpm-store/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 构建输出
+build/
+out/
+
+# 测试覆盖率
+coverage/
+
+# Maven
+*.jar
+*.war
+*.ear
+
+# 前端缓存
+.cache/
+.parcel-cache/
+.eslintcache
+
+# 数据库
+*.db
+*.sqlite
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*~
+
+# 敏感配置
+application-local.yml
+credentials.json
+*.pem
+*.key
