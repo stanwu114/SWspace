@@ -4,6 +4,7 @@ import com.aispace.dto.response.ApiResponse;
 import com.aispace.dto.response.PageResponse;
 import com.aispace.entity.Knowledge;
 import com.aispace.service.KnowledgeService;
+import com.aispace.service.RAGService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.UUID;
 public class KnowledgeController {
     
     private final KnowledgeService knowledgeService;
+    private final RAGService ragService;
     
     /**
      * 获取知识列表
@@ -119,20 +121,19 @@ public class KnowledgeController {
     }
     
     /**
-     * 语义搜索（占位，需要向量数据库支持）
+     * 语义搜索（基于向量相似度）
      */
     @PostMapping("/semantic-search")
     @Operation(summary = "语义搜索")
-    public ApiResponse<PageResponse<Knowledge>> semanticSearch(
+    public ApiResponse<List<RAGService.SearchResult>> semanticSearch(
             @RequestBody SemanticSearchRequest request
     ) {
-        // TODO: 实现向量搜索
-        // 暂时使用关键词搜索代替
-        PageResponse<Knowledge> result = knowledgeService.listKnowledge(
-            null, null, request.query(), 1, request.limit() != null ? request.limit() : 10, 
-            "viewCount", "desc"
+        List<RAGService.SearchResult> results = ragService.hybridSearch(
+            request.query(), 
+            request.limit() != null ? request.limit() : 10,
+            0.3
         );
-        return ApiResponse.success(result);
+        return ApiResponse.success(results);
     }
     
     /**

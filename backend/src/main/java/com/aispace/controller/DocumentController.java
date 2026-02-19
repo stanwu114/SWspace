@@ -130,7 +130,7 @@ public class DocumentController {
     @PostMapping("/{id}/analyze")
     @Operation(summary = "请求AI分析文档")
     public ApiResponse<String> analyzeDocument(@PathVariable UUID id) {
-        // TODO: 触发异步AI分析任务
+        documentService.analyzeDocumentAsync(id);
         return ApiResponse.success("AI分析任务已创建，请稍后查看结果", null);
     }
     

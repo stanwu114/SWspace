@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * 知识库管理工具集 - 使用 AgentScope 官方 @Tool 注解
@@ -28,7 +27,7 @@ public class KnowledgeTools {
     @Tool(description = "搜索知识库内容")
     public String searchKnowledge(
             @ToolParam(name = "keyword", description = "搜索关键词") String keyword,
-            @ToolParam(name = "category", description = "分类: PRODUCT, TECHNICAL, PROCESS, CASE, FAQ, POLICY") String category,
+            @ToolParam(name = "category", description = "分类: INDUSTRY, SOLUTION, CASE, SALES, LESSON, TEMPLATE, OTHER") String category,
             @ToolParam(name = "limit", description = "返回结果数量限制，默认5条") Integer limit) {
         try {
             int resultLimit = limit != null ? limit : 5;
@@ -47,12 +46,8 @@ public class KnowledgeTools {
 
             StringBuilder sb = new StringBuilder("知识库搜索结果：\n");
             for (Knowledge k : result.getItems()) {
-                sb.append(String.format("""
-                    【%s】%s
-                    分类: %s | 标签: %s
-                    摘要: %s
-                    ---
-                    """,
+                sb.append(String.format(
+                    "【%s】%s\n分类: %s | 标签: %s\n摘要: %s\n---\n",
                     k.getId(),
                     k.getTitle(),
                     k.getCategory(),
@@ -74,31 +69,23 @@ public class KnowledgeTools {
     public String getKnowledgeDetail(
             @ToolParam(name = "knowledgeId", description = "知识条目ID") String knowledgeId) {
         try {
-            return knowledgeService.getKnowledge(UUID.fromString(knowledgeId), true)
-                .map(k -> String.format("""
-                    知识详情：
-                    - ID: %s
-                    - 标题: %s
-                    - 分类: %s
-                    - 子分类: %s
-                    - 标签: %s
-                    - 内容:
-                    %s
-                    - 来源: %s
-                    - 浏览次数: %d
-                    - 创建时间: %s
-                    """,
-                    k.getId(),
-                    k.getTitle(),
-                    k.getCategory(),
-                    k.getSubcategory(),
-                    k.getTags(),
-                    k.getContent(),
-                    k.getSource(),
-                    k.getViewCount(),
-                    k.getCreatedAt()
-                ))
-                .orElse("未找到知识条目 ID: " + knowledgeId);
+            var knowledgeOpt = knowledgeService.getKnowledge(UUID.fromString(knowledgeId), true);
+            if (knowledgeOpt.isEmpty()) {
+                return "未找到知识条目 ID: " + knowledgeId;
+            }
+            Knowledge k = knowledgeOpt.get();
+            return String.format(
+                "知识详情：\n- ID: %s\n- 标题: %s\n- 分类: %s\n- 子分类: %s\n- 标签: %s\n- 内容:\n%s\n- 来源: %s\n- 浏览次数: %d\n- 创建时间: %s\n",
+                k.getId(),
+                k.getTitle(),
+                k.getCategory(),
+                k.getSubcategory(),
+                k.getTags(),
+                k.getContent(),
+                k.getSourceName() != null ? k.getSourceName() : "未知",
+                k.getViewCount(),
+                k.getCreatedAt()
+            );
         } catch (Exception e) {
             log.error("查询知识详情失败", e);
             return "查询失败: " + e.getMessage();
@@ -112,7 +99,7 @@ public class KnowledgeTools {
     public String addKnowledge(
             @ToolParam(name = "title", description = "标题") String title,
             @ToolParam(name = "content", description = "内容") String content,
-            @ToolParam(name = "category", description = "分类: PRODUCT, TECHNICAL, PROCESS, CASE, FAQ, POLICY") String category,
+            @ToolParam(name = "category", description = "分类: INDUSTRY, SOLUTION, CASE, SALES, LESSON, TEMPLATE, OTHER") String category,
             @ToolParam(name = "tags", description = "标签，多个用逗号分隔") String tags) {
         try {
             Knowledge knowledge = Knowledge.builder()
@@ -120,9 +107,10 @@ public class KnowledgeTools {
                 .content(content)
                 .category(category != null && !category.isEmpty()
                     ? Knowledge.KnowledgeCategory.valueOf(category)
-                    : Knowledge.KnowledgeCategory.FAQ)
-                .tags(tags)
-                .source("AI助手录入")
+                    : Knowledge.KnowledgeCategory.OTHER)
+                .tags(tags != null ? java.util.Arrays.asList(tags.split(",")) : java.util.List.of())
+                .sourceType(Knowledge.KnowledgeSourceType.MANUAL)
+                .sourceName("AI助手录入")
                 .build();
             
             Knowledge saved = knowledgeService.createKnowledge(knowledge);

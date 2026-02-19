@@ -112,7 +112,7 @@ public class CustomerTools {
                 .name(name)
                 .type(type != null && !type.isEmpty() 
                     ? Customer.CustomerType.valueOf(type) 
-                    : Customer.CustomerType.SMB)
+                    : Customer.CustomerType.ENTERPRISE)
                 .industry(industry)
                 .region(region)
                 .build();

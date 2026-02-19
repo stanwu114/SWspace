@@ -6,6 +6,7 @@ import com.aispace.entity.Customer;
 import com.aispace.service.CustomerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -69,7 +70,15 @@ public class CustomerController {
      */
     @PostMapping
     @Operation(summary = "创建客户")
-    public ApiResponse<Customer> createCustomer(@RequestBody Customer customer) {
+    public ApiResponse<Customer> createCustomer(@Valid @RequestBody Customer customer) {
+        // 验证必填字段
+        if (customer.getName() == null || customer.getName().isBlank()) {
+            return ApiResponse.error(400, "客户名称不能为空");
+        }
+        if (customer.getType() == null) {
+            return ApiResponse.error(400, "客户类型不能为空");
+        }
+        
         Customer created = customerService.createCustomer(customer);
         return ApiResponse.success("客户创建成功", created);
     }
@@ -81,7 +90,7 @@ public class CustomerController {
     @Operation(summary = "更新客户")
     public ApiResponse<Customer> updateCustomer(
             @PathVariable UUID id,
-            @RequestBody Customer customer
+            @Valid @RequestBody Customer customer
     ) {
         Customer updated = customerService.updateCustomer(id, customer);
         return ApiResponse.success("客户更新成功", updated);

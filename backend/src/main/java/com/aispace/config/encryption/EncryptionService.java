@@ -35,14 +35,26 @@ public class EncryptionService {
     private static final int GCM_TAG_LENGTH = 128;      // GCM 认证标签长度（位）
     private static final int KEY_LENGTH = 32;           // AES-256 密钥长度（字节）
     
-    @Value("${aispace.security.encryption-key:default-dev-key-change-in-prod}")
+    // 默认开发密钥（仅用于开发环境）
+    private static final String DEFAULT_DEV_KEY = "default-dev-key-change-in-prod";
+    
+    @Value("${aispace.security.encryption-key:}")
     private String encryptionKey;
+    
+    @Value("${aispace.security.strict-key-validation:true}")
+    private boolean strictKeyValidation;
+    
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
     
     private SecretKey secretKey;
     private final SecureRandom secureRandom = new SecureRandom();
     
     @PostConstruct
     public void init() {
+        // 生产环境强制密钥检查
+        validateEncryptionKey();
+        
         try {
             // 从配置密钥派生 AES-256 密钥
             this.secretKey = deriveKey(encryptionKey);
@@ -59,11 +71,44 @@ public class EncryptionService {
             log.info("加密服务初始化成功，使用 AES-256-GCM 算法");
             
             // 警告：生产环境必须使用强密钥
-            if ("default-dev-key-change-in-prod".equals(encryptionKey)) {
-                log.warn("警告：正在使用默认开发密钥，生产环境请务必设置 aispace.security.encryption-key！");
+            if (DEFAULT_DEV_KEY.equals(encryptionKey)) {
+                log.warn("⚠️ 警告：正在使用默认开发密钥，生产环境请务必设置环境变量 ENCRYPTION_KEY！");
             }
         } catch (Exception e) {
             throw new IllegalStateException("加密服务初始化失败", e);
+        }
+    }
+    
+    /**
+     * 验证加密密钥配置
+     * 生产环境必须配置自定义密钥
+     */
+    private void validateEncryptionKey() {
+        boolean isProduction = "prod".equalsIgnoreCase(activeProfile) || 
+                               "production".equalsIgnoreCase(activeProfile);
+        
+        // 如果密钥为空或使用默认值
+        if (encryptionKey == null || encryptionKey.isBlank()) {
+            if (isProduction && strictKeyValidation) {
+                throw new IllegalStateException(
+                    "❌ 生产环境必须配置加密密钥！请设置环境变量: ENCRYPTION_KEY 或配置: aispace.security.encryption-key"
+                );
+            }
+            // 开发环境使用默认密钥
+            encryptionKey = DEFAULT_DEV_KEY;
+            log.warn("⚠️ 未配置加密密钥，使用默认开发密钥（不适用于生产环境）");
+        }
+        
+        // 生产环境检查是否使用默认密钥
+        if (isProduction && DEFAULT_DEV_KEY.equals(encryptionKey) && strictKeyValidation) {
+            throw new IllegalStateException(
+                "❌ 生产环境禁止使用默认开发密钥！请设置环境变量: ENCRYPTION_KEY"
+            );
+        }
+        
+        // 检查密钥强度
+        if (encryptionKey.length() < 16) {
+            log.warn("⚠️ 加密密钥长度不足（建议至少 16 字符），当前: {} 字符", encryptionKey.length());
         }
     }
     

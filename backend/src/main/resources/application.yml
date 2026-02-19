@@ -123,6 +123,10 @@ aispace:
   # 安全配置
   security:
     encryption-key: ${ENCRYPTION_KEY:default-dev-key-change-in-prod}
+    jwt:
+      enabled: ${JWT_ENABLED:true}
+      secret: ${JWT_SECRET:aispace-default-jwt-secret-key-must-be-at-least-256-bits-long-for-security}
+      expiration: 86400000  # 24小时
   
   # 招标监控配置
   bidding:

@@ -1,0 +1,50 @@
+# 测试环境配置
+spring:
+  profiles:
+    active: test
+  
+  # 测试数据库配置 (H2内存数据库)
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  # JPA测试配置
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: false
+    open-in-view: false
+  
+  # H2控制台 (用于调试)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# 日志配置
+logging:
+  level:
+    root: WARN
+    com.aispace: DEBUG
+    com.aispace.config.encryption: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
+
+# 应用自定义配置
+aispace:
+  security:
+    encryption-key: test-encryption-key-for-unit-testing-only-do-not-use-in-production
+    strict-key-validation: false
+    
+  ai:
+    openai:
+      api-key: test-key
+      base-url: https://test-api.example.com
+      model: gpt-test
+      timeout: 5000

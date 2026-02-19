@@ -1,21 +1,16 @@
 package com.aispace.agent.tools;
 
+import com.aispace.dto.response.PageResponse;
 import com.aispace.entity.BiddingItem;
-import com.aispace.repository.BiddingItemRepository;
 import com.aispace.service.BiddingService;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,32 +22,35 @@ import java.util.UUID;
 public class BiddingTools {
 
     private final BiddingService biddingService;
-    private final BiddingItemRepository biddingItemRepository;
 
     /**
      * 查询招标信息列表
      */
-    @Tool(description = "获取招标信息列表，支持按地区、行业、关键词筛选")
+    @Tool(description = "获取招标信息列表，支持按地区、行业和关键词筛选")
     public String listBiddingItems(
-            @ToolParam(name = "keyword", description = "关键词搜索，可为空") String keyword,
-            @ToolParam(name = "region", description = "地区筛选，可为空") String region) {
+            @ToolParam(name = "region", description = "地区筛选") String region,
+            @ToolParam(name = "industry", description = "行业筛选") String industry,
+            @ToolParam(name = "keyword", description = "关键词搜索") String keyword,
+            @ToolParam(name = "matched", description = "是否只显示匹配的招标") Boolean matched) {
         try {
-            List<BiddingItem> items = biddingItemRepository.search(
-                region, null, keyword,
-                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "publishDate"))
-            ).getContent();
+            PageResponse<BiddingItem> result = biddingService.listItems(
+                region, industry, keyword,
+                matched, false, false,
+                1, 20
+            );
             
-            if (items.isEmpty()) {
+            if (result.getItems().isEmpty()) {
                 return "未找到招标信息";
             }
 
             StringBuilder sb = new StringBuilder("招标信息列表：\n");
-            for (BiddingItem item : items) {
-                sb.append(String.format("- ID: %s, 标题: %s, 地区: %s, 截止日期: %s\n",
-                    item.getId(),
-                    item.getTitle(),
+            for (BiddingItem item : result.getItems()) {
+                sb.append(String.format("- ID: %s, 标题: %s, 地区: %s, 预算: %s, 截止: %s\n",
+                    item.getId(), 
+                    truncate(item.getTitle(), 50), 
                     item.getRegion(),
-                    formatDateTime(item.getDeadline())));
+                    item.getBudget() != null ? item.getBudget().toString() : "未标注",
+                    formatDate(item.getDeadline())));
             }
             return sb.toString();
         } catch (Exception e) {
@@ -66,50 +64,26 @@ public class BiddingTools {
      */
     @Tool(description = "获取招标信息详情")
     public String getBiddingDetail(
-            @ToolParam(name = "biddingId", description = "招标信息ID (UUID格式)") String biddingId) {
+            @ToolParam(name = "biddingId", description = "招标信息ID") String biddingId) {
         try {
-            UUID id = UUID.fromString(biddingId);
-            Optional<BiddingItem> optItem = biddingService.getItem(id);
-            if (optItem.isEmpty()) {
-                return "未找到招标信息 ID: " + biddingId;
-            }
-            BiddingItem item = optItem.get();
-            return String.format("""
-                招标详情：
-                - ID: %s
-                - 标题: %s
-                - 项目名称: %s
-                - 采购人: %s
-                - 代理机构: %s
-                - 类型: %s
-                - 预算: %s
-                - 发布日期: %s
-                - 截止日期: %s
-                - 地区: %s
-                - 行业: %s
-                - 匹配: %s
-                - 内容摘要:
-                %s
-                """,
-                item.getId(),
-                item.getTitle(),
-                item.getProjectName(),
-                item.getPurchaser(),
-                item.getAgency(),
-                item.getBidType(),
-                item.getBudget() != null ? item.getBudget() : "未标注",
-                formatDate(item.getPublishDate()),
-                formatDateTime(item.getDeadline()),
-                item.getRegion(),
-                item.getIndustry(),
-                item.getIsMatched() ? "是 (原因: " + item.getMatchReason() + ")" : "否",
-                item.getSummary() != null ? item.getSummary() 
-                    : (item.getContent() != null && item.getContent().length() > 300
-                        ? item.getContent().substring(0, 300) + "..."
-                        : item.getContent())
-            );
-        } catch (IllegalArgumentException e) {
-            return "无效的招标ID格式: " + biddingId;
+            return biddingService.getItem(UUID.fromString(biddingId))
+                .map(item -> String.format(
+                    "招标详情：\n- ID: %s\n- 标题: %s\n- 采购人: %s\n- 代理机构: %s\n- 预算: %s\n- 地区: %s\n- 行业: %s\n- 发布日期: %s\n- 截止日期: %s\n- 招标类型: %s\n- 内容摘要:\n%s\n- 匹配得分: %s\n- 匹配原因: %s\n",
+                    item.getId(),
+                    item.getTitle(),
+                    item.getPurchaser(),
+                    item.getAgency(),
+                    item.getBudget() != null ? item.getBudget().toString() : "未标注",
+                    item.getRegion(),
+                    item.getIndustry(),
+                    item.getPublishDate(),
+                    formatDate(item.getDeadline()),
+                    item.getBidType(),
+                    truncate(item.getContent(), 300),
+                    item.getMatchScore() != null ? String.format("%.0f%%", item.getMatchScore() * 100) : "未匹配",
+                    item.getMatchReason() != null ? item.getMatchReason() : "无"
+                ))
+                .orElse("未找到招标信息 ID: " + biddingId);
         } catch (Exception e) {
             log.error("查询招标详情失败", e);
             return "查询失败: " + e.getMessage();
@@ -117,48 +91,81 @@ public class BiddingTools {
     }
 
     /**
-     * 添加招标信息
+     * 获取匹配的招标
      */
-    @Tool(description = "添加新的招标信息")
-    public String addBiddingItem(
-            @ToolParam(name = "title", description = "标题") String title,
-            @ToolParam(name = "content", description = "内容") String content,
-            @ToolParam(name = "sourceId", description = "数据源ID (UUID格式)") String sourceId,
-            @ToolParam(name = "deadline", description = "截止日期，格式：yyyy-MM-dd") String deadline) {
+    @Tool(description = "获取与公司业务匹配的招标信息")
+    public String getMatchedItems() {
         try {
-            BiddingItem item = new BiddingItem();
-            item.setTitle(title);
-            item.setContent(content);
-            if (sourceId != null && !sourceId.isEmpty()) {
-                item.setSourceId(UUID.fromString(sourceId));
+            var items = biddingService.getMatchedItems();
+            if (items.isEmpty()) {
+                return "暂无匹配的招标信息";
             }
             
-            if (deadline != null && !deadline.isEmpty()) {
-                item.setDeadline(LocalDateTime.parse(deadline + "T23:59:59"));
+            StringBuilder sb = new StringBuilder("匹配的招标信息：\n");
+            for (BiddingItem item : items) {
+                sb.append(String.format("- %s (ID: %s)\n  截止: %s, 匹配度: %.0f%%\n",
+                    truncate(item.getTitle(), 40), 
+                    item.getId(),
+                    formatDate(item.getDeadline()),
+                    item.getMatchScore() != null ? item.getMatchScore() * 100 : 0));
             }
-            
-            BiddingItem saved = biddingService.createItem(item);
-            return "招标信息添加成功，ID: " + saved.getId();
-        } catch (IllegalArgumentException e) {
-            return "参数格式错误: " + e.getMessage();
+            return sb.toString();
         } catch (Exception e) {
-            log.error("添加招标信息失败", e);
-            return "添加失败: " + e.getMessage();
+            log.error("获取匹配招标失败", e);
+            return "查询失败: " + e.getMessage();
         }
     }
 
     /**
-     * 标记招标信息为已读
+     * 获取即将到期的招标
      */
-    @Tool(description = "标记招标信息为已读")
-    public String markBiddingAsRead(
-            @ToolParam(name = "biddingId", description = "招标信息ID (UUID格式)") String biddingId) {
+    @Tool(description = "获取即将到截止日期的招标信息")
+    public String getUpcomingDeadlines(
+            @ToolParam(name = "days", description = "查询未来多少天内到期的招标") Integer days) {
         try {
-            UUID id = UUID.fromString(biddingId);
-            biddingService.markAsRead(id);
+            var items = biddingService.getUpcomingDeadlines(days != null ? days : 7);
+            if (items.isEmpty()) {
+                return "未来 " + (days != null ? days : 7) + " 天内无即将到期的招标";
+            }
+            
+            StringBuilder sb = new StringBuilder("即将到期的招标：\n");
+            for (BiddingItem item : items) {
+                sb.append(String.format("- %s\n  截止: %s, 预算: %s\n",
+                    truncate(item.getTitle(), 40),
+                    formatDate(item.getDeadline()),
+                    item.getBudget() != null ? item.getBudget().toString() : "未标注"));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("获取即将到期招标失败", e);
+            return "查询失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 收藏/取消收藏招标
+     */
+    @Tool(description = "收藏或取消收藏招标信息")
+    public String toggleStar(
+            @ToolParam(name = "biddingId", description = "招标信息ID") String biddingId) {
+        try {
+            biddingService.toggleStar(UUID.fromString(biddingId));
+            return "收藏状态已切换";
+        } catch (Exception e) {
+            log.error("切换收藏状态失败", e);
+            return "操作失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 标记已读
+     */
+    @Tool(description = "将招标信息标记为已读")
+    public String markAsRead(
+            @ToolParam(name = "biddingId", description = "招标信息ID") String biddingId) {
+        try {
+            biddingService.markAsRead(UUID.fromString(biddingId));
             return "已标记为已读";
-        } catch (IllegalArgumentException e) {
-            return "无效的招标ID格式: " + biddingId;
         } catch (Exception e) {
             log.error("标记已读失败", e);
             return "操作失败: " + e.getMessage();
@@ -166,59 +173,50 @@ public class BiddingTools {
     }
 
     /**
-     * 获取匹配的招标信息
+     * 关联项目
      */
-    @Tool(description = "获取与用户关注关键词匹配的招标信息")
-    public String getMatchedBiddings() {
+    @Tool(description = "将招标信息关联到项目")
+    public String linkToProject(
+            @ToolParam(name = "biddingId", description = "招标信息ID") String biddingId,
+            @ToolParam(name = "projectId", description = "项目ID") String projectId) {
         try {
-            List<BiddingItem> items = biddingService.getMatchedItems();
-            if (items.isEmpty()) {
-                return "暂无匹配的招标信息";
-            }
-            StringBuilder sb = new StringBuilder("匹配的招标信息：\n");
-            for (BiddingItem item : items) {
-                sb.append(String.format("- ID: %s, 标题: %s, 匹配原因: %s, 截止: %s\n",
-                    item.getId(), item.getTitle(), item.getMatchReason(),
-                    formatDateTime(item.getDeadline())));
-            }
-            return sb.toString();
+            biddingService.linkToProject(UUID.fromString(biddingId), UUID.fromString(projectId));
+            return "已将招标信息关联到项目";
         } catch (Exception e) {
-            log.error("查询匹配招标失败", e);
-            return "查询失败: " + e.getMessage();
+            log.error("关联项目失败", e);
+            return "操作失败: " + e.getMessage();
         }
     }
 
     /**
-     * 获取即将截止的招标
+     * 获取统计信息
      */
-    @Tool(description = "获取即将截止的招标信息，默认7天内")
-    public String getUpcomingDeadlines(
-            @ToolParam(name = "days", description = "天数范围，默认7天") Integer days) {
+    @Tool(description = "获取招标统计信息")
+    public String getStatistics() {
         try {
-            int d = days != null ? days : 7;
-            List<BiddingItem> items = biddingService.getUpcomingDeadlines(d);
-            if (items.isEmpty()) {
-                return "未来" + d + "天内没有即将截止的招标信息";
-            }
-            StringBuilder sb = new StringBuilder("即将截止的招标信息（" + d + "天内）：\n");
-            for (BiddingItem item : items) {
-                sb.append(String.format("- ID: %s, 标题: %s, 截止: %s\n",
-                    item.getId(), item.getTitle(), formatDateTime(item.getDeadline())));
-            }
-            return sb.toString();
+            var stats = biddingService.getStatistics();
+            return String.format(
+                "招标统计：\n- 今日新增: %d\n- 匹配数量: %d\n- 未读数量: %d\n- 即将截止: %d\n- 活跃数据源: %d\n",
+                stats.get("todayCount"),
+                stats.get("matchedCount"),
+                stats.get("unreadCount"),
+                stats.get("upcomingDeadlines"),
+                stats.get("activeSources")
+            );
         } catch (Exception e) {
-            log.error("查询即将截止招标失败", e);
+            log.error("获取统计信息失败", e);
             return "查询失败: " + e.getMessage();
         }
     }
 
-    private String formatDateTime(LocalDateTime date) {
+    private String formatDate(LocalDateTime date) {
         if (date == null) return "未设置";
         return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
     }
 
-    private String formatDate(LocalDate date) {
-        if (date == null) return "未设置";
-        return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+    private String truncate(String text, int maxLength) {
+        if (text == null) return "";
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength) + "...";
     }
 }

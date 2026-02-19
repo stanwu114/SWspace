@@ -25,6 +25,7 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class AgentManagerService {
 
+    private final IntelAgent intelAgent;  // 情报分析师
     private final CRMAgent crmAgent;
     private final KnowledgeAgent knowledgeAgent;
     private final BiddingAgent biddingAgent;
@@ -36,6 +37,7 @@ public class AgentManagerService {
      */
     public AISpaceAgent getAgent(String agentType) {
         return switch (agentType.toLowerCase()) {
+            case "intel" -> intelAgent;     // 情报分析师
             case "crm" -> crmAgent;
             case "knowledge" -> knowledgeAgent;
             case "bidding" -> biddingAgent;
@@ -106,6 +108,7 @@ public class AgentManagerService {
     public Map<String, Object> getAllAgentStatus() {
         Map<String, Object> status = new HashMap<>();
         
+        status.put("intel", intelAgent.getStatus());
         status.put("crm", crmAgent.getStatus());
         status.put("knowledge", knowledgeAgent.getStatus());
         status.put("bidding", biddingAgent.getStatus());

@@ -96,7 +96,7 @@ public class CustomerService {
         Customer customer = customerRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Customer not found: " + id));
         
-        // 更新字段
+        // 更新所有可更新字段
         if (customerData.getName() != null) {
             customer.setName(customerData.getName());
         }
@@ -112,14 +112,26 @@ public class CustomerService {
         if (customerData.getRegion() != null) {
             customer.setRegion(customerData.getRegion());
         }
+        if (customerData.getAddress() != null) {
+            customer.setAddress(customerData.getAddress());
+        }
         if (customerData.getLevel() != null) {
             customer.setLevel(customerData.getLevel());
+        }
+        if (customerData.getOrgStructure() != null) {
+            customer.setOrgStructure(customerData.getOrgStructure());
+        }
+        if (customerData.getRelationshipScore() != null) {
+            customer.setRelationshipScore(customerData.getRelationshipScore());
         }
         if (customerData.getTags() != null) {
             customer.setTags(customerData.getTags());
         }
         if (customerData.getNotes() != null) {
             customer.setNotes(customerData.getNotes());
+        }
+        if (customerData.getWebsite() != null) {
+            customer.setWebsite(customerData.getWebsite());
         }
         
         log.info("Updating customer: {}", id);
