@@ -1,18 +1,15 @@
-import { Send, Paperclip, Loader2, Plus, ThumbsUp, ThumbsDown, Search, FileText, MessageSquare, BookOpen, AlertCircle, Wifi, WifiOff, Trash2, Copy, Check, X } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChatStore } from '@/stores/chatStore'
 import { api } from '@/services/api'
 import { wsService } from '@/services/websocket'
-import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer'
-import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator'
-import type { AIMessage, AgentType, ChatResponse } from '@/types'
-
-const agents = [
-  { id: 'intel' as AgentType, name: '情报分析师', desc: '招标监控 · 政策解读', icon: Search },
-  { id: 'doc' as AgentType, name: '文档写手', desc: '方案撰写 · 标书编写', icon: FileText },
-  { id: 'crm' as AgentType, name: '客户助理', desc: '客户管理 · 跟进提醒', icon: MessageSquare },
-  { id: 'knowledge' as AgentType, name: '知识管家', desc: '知识检索 · 案例管理', icon: BookOpen },
-]
+import { AgentSelector, agents } from '@/components/chat/AgentSelector'
+import { SessionList } from '@/components/chat/SessionList'
+import { ChatHeader } from '@/components/chat/ChatHeader'
+import { SearchBar } from '@/components/chat/SearchBar'
+import { MessageList } from '@/components/chat/MessageList'
+import { ChatInput } from '@/components/chat/ChatInput'
+import type { AgentType, ChatResponse, AISession } from '@/types'
 
 export default function Chat() {
   const {
@@ -22,7 +19,7 @@ export default function Chat() {
 
   const [inputMessage, setInputMessage] = useState('')
   const [isConnected, setIsConnected] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [_isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -32,15 +29,17 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const messagesRef = useRef<AIMessage[]>([])
+  const messagesRef = useRef<typeof messages>([])
 
-  // Keep messagesRef in sync to avoid stale closure in WebSocket handler
+  // Keep messagesRef in sync
   useEffect(() => { messagesRef.current = messages }, [messages])
 
-  const scrollToBottom = useCallback(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [])
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
   useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
 
-  // Search filtering and highlight
+  // Search filtering
   const filteredMessages = useMemo(() => {
     if (!searchTerm.trim()) return messages
     const term = searchTerm.toLowerCase()
@@ -48,8 +47,7 @@ export default function Chat() {
   }, [messages, searchTerm])
 
   const matchCount = useMemo(() => {
-    if (!searchTerm.trim()) return 0
-    return filteredMessages.length
+    return searchTerm.trim() ? filteredMessages.length : 0
   }, [filteredMessages, searchTerm])
 
   // Search shortcut: Ctrl/Cmd + F
@@ -91,8 +89,11 @@ export default function Chat() {
     const load = async () => {
       try {
         setSessionsLoading(true)
-        const r = await api.agent.getSessions({ agentType: currentAgentType.toUpperCase() }) as any
-        if (r?.code === 200) setSessions(r.data?.items || r.data || [])
+        const r = await api.agent.getSessions({ agentType: currentAgentType.toUpperCase() }) as unknown as { code: number; data?: { items?: AISession[] } | AISession[] }
+        if (r?.code === 200) {
+          const data = r.data
+          setSessions(Array.isArray(data) ? data : data?.items || [])
+        }
       } catch {
         setSessions([])
       } finally {
@@ -102,7 +103,7 @@ export default function Chat() {
     load()
   }, [currentAgentType, setSessions])
 
-  // WebSocket subscription - uses ref to avoid stale closure
+  // WebSocket subscription
   useEffect(() => {
     if (!currentSessionId || !isConnected) return
 
@@ -158,19 +159,23 @@ export default function Chat() {
     try {
       setIsLoading(true)
       setError(null)
-      const r = await api.agent.getSessionMessages(id) as any
-      if (r?.code === 200) setMessages(r.data?.items || r.data || [])
-      else setMessages([])
-    } catch (e: any) {
-      setError(e?.message || '加载消息失败')
+      const r = await api.agent.getSessionMessages(id) as unknown as { code: number; data?: { items?: typeof messages } | typeof messages }
+      if (r?.code === 200) {
+        const data = r.data
+        setMessages(Array.isArray(data) ? data : data?.items || [])
+      } else {
+        setMessages([])
+      }
+    } catch (e: unknown) {
+      setError((e as Error)?.message || '加载消息失败')
       setMessages([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleAgentChange = (t: AgentType) => {
-    setCurrentAgentType(t)
+  const handleAgentChange = (type: AgentType) => {
+    setCurrentAgentType(type)
     setCurrentSession(null)
     setMessages([])
     setError(null)
@@ -180,7 +185,7 @@ export default function Chat() {
     try {
       setIsLoading(true)
       setError(null)
-      const r = await api.agent.createSession(currentAgentType.toUpperCase()) as any
+      const r = await api.agent.createSession(currentAgentType.toUpperCase()) as unknown as { code: number; data?: AISession; message?: string }
       if (r?.code === 200 && r.data) {
         setSessions([r.data, ...sessions])
         setCurrentSession(r.data.id)
@@ -188,8 +193,8 @@ export default function Chat() {
       } else {
         setError(r?.message || '创建会话失败')
       }
-    } catch (e: any) {
-      setError(e?.message || '创建会话失败，请检查后端服务')
+    } catch (e: unknown) {
+      setError((e as Error)?.message || '创建会话失败，请检查后端服务')
     } finally {
       setIsLoading(false)
     }
@@ -202,7 +207,7 @@ export default function Chat() {
     let sid = currentSessionId
     if (!sid) {
       try {
-        const r = await api.agent.createSession(currentAgentType.toUpperCase()) as any
+        const r = await api.agent.createSession(currentAgentType.toUpperCase()) as unknown as { code: number; data?: AISession; message?: string }
         if (r?.code === 200 && r.data) {
           sid = r.data.id
           setSessions([r.data, ...sessions])
@@ -211,16 +216,16 @@ export default function Chat() {
           setError('创建会话失败')
           return
         }
-      } catch (e: any) {
-        setError(e?.message || '创建会话失败')
+      } catch (e: unknown) {
+        setError((e as Error)?.message || '创建会话失败')
         return
       }
     }
 
-    const userMsg: AIMessage = {
+    const userMsg = {
       id: `user-${Date.now()}`,
       sessionId: sid!,
-      role: 'user',
+      role: 'user' as const,
       content: inputMessage,
       createdAt: new Date().toISOString(),
     }
@@ -235,20 +240,21 @@ export default function Chat() {
       try {
         setStreaming(true)
         setThinkingStart(Date.now())
-        const r = await api.agent.chat(sid!, msgContent) as any
+        const r = await api.agent.chat(sid!, msgContent) as unknown as { code: number; data?: { id?: string; content?: string } | string; message?: string }
         if (r?.code === 200 && r.data) {
+          const data = typeof r.data === 'string' ? { content: r.data } : r.data
           addMessage({
-            id: r.data.id || `ai-${Date.now()}`,
+            id: data.id || `ai-${Date.now()}`,
             sessionId: sid!,
             role: 'assistant',
-            content: r.data.content || r.data,
+            content: data.content || '',
             createdAt: new Date().toISOString(),
           })
         } else {
           setError(r?.message || 'AI 响应失败')
         }
-      } catch (e: any) {
-        setError(e?.message || 'AI 响应失败，请检查后端服务')
+      } catch (e: unknown) {
+        setError((e as Error)?.message || 'AI 响应失败，请检查后端服务')
       } finally {
         setStreaming(false)
         setThinkingStart(null)
@@ -257,15 +263,11 @@ export default function Chat() {
     textareaRef.current?.focus()
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-  }
-
   const handleFeedback = async (id: string, fb: 'good' | 'bad') => {
     try {
       await api.agent.feedbackMessage(id, fb)
       updateMessage(id, { feedback: fb })
-    } catch {}
+    } catch { /* ignore */ }
   }
 
   const handleCopy = useCallback((id: string, content: string) => {
@@ -283,112 +285,54 @@ export default function Chat() {
         setCurrentSession(null)
         setMessages([])
       }
-    } catch {}
+    } catch { /* ignore */ }
+  }
+
+  const handleSelectSession = (id: string) => {
+    setCurrentSession(id)
+    loadSessionMessages(id)
+  }
+
+  const handleToggleSearch = () => {
+    setShowSearch(!showSearch)
+    if (showSearch) setSearchTerm('')
   }
 
   const currentAgent = agents.find(a => a.id === currentAgentType)!
-  const AgentIcon = currentAgent.icon
   const displayMessages = searchTerm.trim() ? filteredMessages : messages
 
   return (
     <div className="flex h-full">
       {/* Left panel */}
       <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
-        <div className="px-3 py-3">
-          <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 px-2">AI 员工</div>
-          <div className="space-y-0.5">
-            {agents.map(a => {
-              const Icon = a.icon
-              return (
-                <button key={a.id} onClick={() => handleAgentChange(a.id)}
-                  className={`w-full px-3 py-2 rounded-lg text-left flex items-center gap-2.5 transition-colors text-sm ${
-                    currentAgentType === a.id ? 'bg-brand-50 text-brand-600 font-medium' : 'text-gray-600 hover:bg-gray-50'
-                  }`}>
-                  <Icon className={`w-[18px] h-[18px] shrink-0 ${currentAgentType === a.id ? 'text-brand-500' : 'text-brand-500'}`} />
-                  <span className="truncate">{a.name}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-auto px-3 py-2 border-t border-gray-100">
-          <div className="flex items-center justify-between mb-2 px-2">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">对话</span>
-            <button onClick={handleCreateSession} disabled={isLoading}
-              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50" title="新建">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          {sessionsLoading ? (
-            <div className="flex justify-center py-4">
-              <div className="w-4 h-4 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              {sessions.map(s => (
-                <div key={s.id} className="group relative flex items-center">
-                  <button onClick={() => { setCurrentSession(s.id); loadSessionMessages(s.id) }}
-                    className={`flex-1 px-3 py-2 rounded-lg text-left text-sm transition-colors truncate ${
-                      currentSessionId === s.id ? 'bg-brand-50 text-brand-600 font-medium' : 'text-gray-500 hover:bg-gray-50'
-                    }`}>{s.title || '新对话'}</button>
-                  <button onClick={() => handleDeleteSession(s.id)}
-                    className="p-1 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              {sessions.length === 0 && <p className="text-xs text-gray-400 text-center py-4">暂无对话</p>}
-            </div>
-          )}
-        </div>
-
-        <div className="px-4 py-3 border-t border-gray-100">
-          <div className="flex items-center gap-2 text-xs">
-            {isConnected ? <Wifi className="w-3 h-3 text-emerald-500" /> : <WifiOff className="w-3 h-3 text-red-400" />}
-            <span className="text-gray-400">{isConnected ? '已连接' : '未连接'}</span>
-          </div>
-        </div>
+        <AgentSelector currentAgentType={currentAgentType} onAgentChange={handleAgentChange} />
+        <SessionList
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          isLoading={sessionsLoading}
+          isConnected={isConnected}
+          onSelectSession={handleSelectSession}
+          onCreateSession={handleCreateSession}
+          onDeleteSession={handleDeleteSession}
+        />
       </div>
 
       {/* Chat area */}
       <div className="flex-1 flex flex-col">
-        <div className="h-12 flex items-center px-5 bg-white border-b border-gray-200 shrink-0 gap-2">
-          <AgentIcon className="w-4 h-4 text-brand-500" />
-          <span className="text-sm font-medium text-gray-800">{currentAgent.name}</span>
-          <span className="text-xs text-gray-400">{currentAgent.desc}</span>
-          <div className="flex-1" />
-          <button
-            onClick={() => { setShowSearch(!showSearch); if (showSearch) setSearchTerm('') }}
-            className={`p-1.5 rounded-md transition-colors ${showSearch ? 'bg-brand-50 text-brand-500' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-            title="搜索 (Ctrl+F)"
-          >
-            <Search className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <ChatHeader
+          currentAgentType={currentAgentType}
+          showSearch={showSearch}
+          onToggleSearch={handleToggleSearch}
+        />
 
-        {/* Search bar */}
         {showSearch && (
-          <div className="px-5 py-2 bg-white border-b border-gray-200 flex items-center gap-2">
-            <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="搜索消息..."
-              className="flex-1 text-sm border-none outline-none bg-transparent placeholder:text-gray-400"
-              autoFocus
-            />
-            {searchTerm && (
-              <span className="text-xs text-gray-400 shrink-0">
-                {matchCount} 条匹配
-              </span>
-            )}
-            <button onClick={() => { setShowSearch(false); setSearchTerm('') }} className="p-1 text-gray-400 hover:text-gray-600">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <SearchBar
+            searchTerm={searchTerm}
+            matchCount={matchCount}
+            inputRef={searchInputRef}
+            onSearchChange={setSearchTerm}
+            onClose={() => { setShowSearch(false); setSearchTerm('') }}
+          />
         )}
 
         {/* Error banner */}
@@ -400,85 +344,25 @@ export default function Chat() {
           </div>
         )}
 
-        <div className="flex-1 overflow-auto p-5">
-          <div className="max-w-2xl mx-auto space-y-3">
-            {messages.length === 0 && !isLoading && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <p className="text-sm text-gray-600">您好！我是<strong>{currentAgent.name}</strong>，{currentAgent.desc}。请问有什么可以帮您的？</p>
-              </div>
-            )}
-            {displayMessages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${
-                  msg.role === 'user' ? 'bg-brand-500 text-white' : 'bg-white text-gray-700 border border-gray-200'
-                }`}>
-                  {msg.role === 'user' ? (
-                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                  ) : (
-                    <>
-                      {/* AI thinking state: no content yet and still streaming */}
-                      {isStreaming && !msg.content && msg === messages[messages.length - 1] && (
-                        <ThinkingIndicator startTime={thinkingStart || undefined} />
-                      )}
-                      {/* Markdown rendered content */}
-                      {msg.content && (
-                        <MarkdownRenderer content={msg.content} />
-                      )}
-                      {/* Streaming cursor */}
-                      {isStreaming && msg.content && msg === messages[messages.length - 1] && (
-                        <span className="inline-block w-1 h-4 ml-0.5 bg-brand-300 rounded-sm animate-pulse align-middle" />
-                      )}
-                    </>
-                  )}
-                  {/* Action buttons for completed AI messages */}
-                  {msg.role === 'assistant' && !isStreaming && msg.content && (
-                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
-                      <button
-                        onClick={() => handleCopy(msg.id, msg.content)}
-                        className={`p-1 rounded hover:bg-gray-50 transition-colors ${copiedId === msg.id ? 'text-emerald-500' : 'text-gray-300 hover:text-gray-500'}`}
-                        title="复制"
-                      >
-                        {copiedId === msg.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                      <button onClick={() => handleFeedback(msg.id, 'good')}
-                        className={`p-1 rounded hover:bg-gray-50 ${msg.feedback === 'good' ? 'text-brand-500' : 'text-gray-300'}`}>
-                        <ThumbsUp className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => handleFeedback(msg.id, 'bad')}
-                        className={`p-1 rounded hover:bg-gray-50 ${msg.feedback === 'bad' ? 'text-red-400' : 'text-gray-300'}`}>
-                        <ThumbsDown className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-center py-4">
-                <div className="w-5 h-5 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
+        <MessageList
+          messages={displayMessages}
+          isStreaming={isStreaming}
+          thinkingStart={thinkingStart}
+          copiedId={copiedId}
+          currentAgentName={currentAgent.name}
+          onCopy={handleCopy}
+          onFeedback={handleFeedback}
+        />
+        <div ref={messagesEndRef} />
 
-        <div className="px-5 py-3 bg-white border-t border-gray-200">
-          <div className="max-w-2xl mx-auto flex items-end gap-2">
-            <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg shrink-0">
-              <Paperclip className="w-4 h-4" />
-            </button>
-            <div className="flex-1 relative">
-              <textarea ref={textareaRef} value={inputMessage} onChange={e => setInputMessage(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder={isConnected ? '输入消息... (Enter 发送)' : '未连接到服务器，使用 REST 模式...'}
-                rows={1} disabled={isStreaming}
-                className="w-full px-3 py-2.5 pr-11 border border-gray-200 rounded-lg text-sm resize-none placeholder:text-gray-400" />
-              <button onClick={handleSend} disabled={!inputMessage.trim() || isStreaming}
-                className="absolute right-2 bottom-1.5 w-7 h-7 bg-brand-500 text-white rounded-md flex items-center justify-center hover:bg-brand-600 disabled:opacity-30 transition-all">
-                {isStreaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ChatInput
+          inputMessage={inputMessage}
+          isStreaming={isStreaming}
+          isConnected={isConnected}
+          textareaRef={textareaRef}
+          onInputChange={setInputMessage}
+          onSend={handleSend}
+        />
       </div>
     </div>
   )

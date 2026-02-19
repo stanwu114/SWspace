@@ -3,9 +3,8 @@ package com.aispace.config.encryption;
 import com.aispace.entity.Customer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -18,17 +17,16 @@ import static org.mockito.Mockito.*;
  * 加密实体监听器测试类
  * 测试 EncryptionEntityListener 的加解密功能
  */
-@SpringBootTest
-@ActiveProfiles("test")
 class EncryptionEntityListenerTest {
 
-    @MockBean
+    @Mock
     private EncryptionService encryptionService;
 
     private EncryptionEntityListener listener;
 
     @BeforeEach
     void setUp() {
+        MockitoAnnotations.openMocks(this);
         listener = new EncryptionEntityListener(encryptionService);
     }
 

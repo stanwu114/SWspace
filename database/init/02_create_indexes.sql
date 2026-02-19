@@ -9,6 +9,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_bid_deadline ON projects(bid_deadline);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_name_gin ON projects USING gin(to_tsvector('simple', name));
 
+-- 复合索引：客户+状态组合查询
+CREATE INDEX IF NOT EXISTS idx_projects_customer_status ON projects(customer_id, status);
+
 -- ==============================================
 -- 客户表索引
 -- ==============================================
@@ -17,6 +20,10 @@ CREATE INDEX IF NOT EXISTS idx_customers_level ON customers(level);
 CREATE INDEX IF NOT EXISTS idx_customers_region ON customers(region);
 CREATE INDEX IF NOT EXISTS idx_customers_next_follow_up ON customers(next_follow_up_at);
 CREATE INDEX IF NOT EXISTS idx_customers_name_gin ON customers USING gin(to_tsvector('simple', name));
+
+-- 复合索引：多条件组合查询
+CREATE INDEX IF NOT EXISTS idx_customers_multi_criteria ON customers(type, level, region);
+CREATE INDEX IF NOT EXISTS idx_customers_level_follow_up ON customers(level, next_follow_up_at) WHERE next_follow_up_at IS NOT NULL;
 
 -- ==============================================
 -- 联系人表索引
