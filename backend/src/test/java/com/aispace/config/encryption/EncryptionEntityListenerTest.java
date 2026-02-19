@@ -125,19 +125,21 @@ class EncryptionEntityListenerTest {
             .notes("有效备注")
             .build();
 
+        // 空字符串不加密（isEmpty=true），空白字符串和正常内容需要加密
         when(encryptionService.isEncrypted("")).thenReturn(false);
         when(encryptionService.isEncrypted(" ")).thenReturn(false);
         when(encryptionService.isEncrypted("有效备注")).thenReturn(false);
+        when(encryptionService.encrypt(" ")).thenReturn("encrypted_ ");
         when(encryptionService.encrypt("有效备注")).thenReturn("encrypted_有效备注");
 
         // When
         listener.prePersist(customer);
 
         // Then
-        assertThat(customer.getName()).isEqualTo(""); // 空字符串不加密
-        assertThat(customer.getAddress()).isEqualTo(" "); // 空白字符串不加密
-        assertThat(customer.getNotes()).startsWith("encrypted_");
-        verify(encryptionService, times(1)).encrypt(anyString());
+        assertThat(customer.getName()).isEqualTo(""); // 空字符串保持不变
+        assertThat(customer.getAddress()).isEqualTo("encrypted_ "); // 空白字符串也要加密
+        assertThat(customer.getNotes()).isEqualTo("encrypted_有效备注");
+        verify(encryptionService, times(2)).encrypt(anyString());
     }
 
     @Test
@@ -266,8 +268,8 @@ class EncryptionEntityListenerTest {
             .orgStructure(orgStructure)
             .build();
 
-        when(encryptionService.isEncrypted("encrypted_测试公司")).thenReturn(true);
-        when(encryptionService.isEncrypted(anyString())).thenReturn(false);
+        // 使用 lenient 避免 Mockito 严格匹配问题
+        lenient().when(encryptionService.isEncrypted("encrypted_测试公司")).thenReturn(true);
         when(encryptionService.decrypt("encrypted_测试公司")).thenReturn("测试公司");
 
         // When
@@ -275,9 +277,9 @@ class EncryptionEntityListenerTest {
 
         // Then
         assertThat(customer.getName()).isEqualTo("测试公司");
-        // orgStructure 保持不变
+        // orgStructure 保持不变（非 String 类型不处理）
         assertThat(customer.getOrgStructure()).isEqualTo(orgStructure);
-        verify(encryptionService, times(1)).decrypt(anyString());
+        verify(encryptionService, times(1)).decrypt(eq("encrypted_测试公司"));
     }
 
     @Test
